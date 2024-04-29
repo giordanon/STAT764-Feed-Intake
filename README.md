@@ -7,14 +7,16 @@ The **models** directory contains .stan files with model 1 (feed intake predicto
 
 The **code** folder contain scripts to reproduce the analysis:
 
-- 3 Model Fitting.Rmd. Code to run Stan filed with for models 1 and 2.
+- *3. Model Fitting.Rmd.* Code to run Stan filed with for models 1 and 2.
    
-- 5 Derive Quantities.Rmd. Code to derive quantities from posterior distribtuions from stanfit object.
+- *5. Derive Quantities.Rmd.* Code to derive quantities from posterior distribtuions from stanfit object.
    
-- 6.1 Plot Validation.Rmd. Reproduce Figure 1.
+- *6.1 Plot Validation.Rmd.* Reproduce Figure 1.
 
-- 6.2 Plot ADG and RFI.Rmd. Reproduce Figure 2.
+- *6.2 Plot ADG and RFI.Rmd.* Reproduce Figure 2.
 
-- 6.3 Plot RFI and BETA1.Rmd. Reproduce Figure 3.
+- *6.3 Plot RFI and BETA1.Rmd.* Reproduce Figure 3.
 
-- 6.4 Plot ADG BETA1.Rmd. Reproduce Figure 4. 
+- *6.4 Plot ADG BETA1.Rmd*. Reproduce Figure 4.
+
+- The *functions.R* file contains backend functions used in Rmd files. 
