@@ -1,0 +1,227 @@
+
+# ADG and BETA 1
+
+# Model 1
+
+```{r}
+predFi <- readRDS("../output/posterior_rfi.RData")
+
+predAdg <- readRDS("../output/posterior_adg.RData") %>% 
+  mutate(indid = as.integer(indid))
+
+predbeta <- readRDS("../output/posterior_beta_model1.RData") %>% 
+  mutate(indid = as.integer(indid))
+
+rfi <- 
+full_join(predFi,
+          df2[, c("Group","ID", "rowid", "fi", "BWto")],
+          by = join_by("Group", "rowid")) %>% 
+  mutate(rfi = fi - exp(predfi)) 
+  
+
+indid <- 
+  rfi[,c("ID")] %>%
+  unique() %>% 
+  cbind(indid = c(seq(1,117), seq(1,118)))
+
+rfi <- 
+  full_join(indid, rfi, by = join_by("ID")) 
+```
+
+Join and summarize
+
+```{r}
+allOut <- 
+  full_join(rfi,predbeta, 
+            by = join_by("indid", "draw", "Group" ) ) %>% 
+  full_join(predAdg,
+            by = join_by("indid", "draw", "Group" ))
+
+ 
+
+dataPlot <- 
+ allOut %>% 
+  # Get the average RFI throughout the cycle
+  group_by(ID, Group, draw) %>% 
+  summarise_at(vars(rfi, beta, adg), ~mean(.)) %>% 
+  group_by(ID, Group) %>% 
+  summarise_at(vars(rfi, beta, adg), list(mean = ~mean(.), 
+                                    q025 = ~quantile(., probs = 0.25), 
+                                    q975 = ~quantile(., probs = 0.75)
+                                    )
+               ) %>% 
+  group_by(Group) %>% 
+  mutate(meanadg = mean(adg_mean)) %>% 
+  ungroup() %>% 
+  # categorizing quadrants
+  mutate(.,
+         good = case_when(rfi_mean <=0 & adg_q025 > meanadg~ "Favorable", T~"Unfavorable" ),
+         IDlabel = case_when(good == "Favorable"~ID, T~NA_real_)
+         )
+
+
+
+```
+
+```{r}
+p5<-
+ggplot(data = dataPlot, 
+       aes(x = beta_mean, 
+          y = rfi_mean,
+          fill = good,
+          shape = Group))+
+  facet_wrap(~Group)+
+  geom_hline(yintercept = 0, linetype = "dashed")+
+  # Credible interval fro RFI
+  geom_linerange(aes(ymax = rfi_q975, ymin = rfi_q025, x = beta_mean),
+                alpha = 0.15)+
+  # Credible interval fro ADG
+  
+  geom_linerange(aes(xmax = beta_q975, xmin = beta_q025, y = rfi_mean),
+                alpha = .15)+
+  geom_point(alpha = .4)+
+  ggrepel::geom_label_repel(aes(label = IDlabel, x =beta_mean, y = rfi_mean), 
+                            max.overlaps = 15, 
+                            min.segment.length = unit(0, 'lines'),
+                            fill = "white", 
+                            color = "blue4")+
+  # 1:1 line
+  # Aesthetics
+  scale_fill_manual(values = c("blue4", "grey40"))+
+  scale_shape_manual(values = c(21,24))+
+  #scale_x_continuous(limits = c(0,25))+
+  #scale_y_continuous(limits = c(0,25))+
+  
+  guides(fill = guide_legend(title = "RFI category", 
+                             override.aes = list(alpha = 0.7, shape = 21) ), 
+         shape = "none")+
+  labs(y = expression(paste(italic(RFI["i \U00B7"]),"(kg ", DM~day^-1,")")), x = expression(paste(italic(beta["1i"]),"(kg DM",kg^-1,")")))+
+  theme_bw()+
+  theme(legend.position = "top", 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()
+        )
+p5
+```
+
+# Model 2
+
+```{r}
+predFi <- readRDS("../output/posterior_rfi_model2.RData")
+predAdg <- readRDS("../output/posterior_adg_model2.RData") %>% 
+  mutate(indid = as.integer(indid))
+
+predbeta <- readRDS("../output/posterior_beta_model2.RData") %>% 
+  mutate(indid = as.integer(indid))
+
+rfi <- 
+full_join(predFi,
+          df2[, c("Group","ID", "rowid", "fi", "BWto")],
+          by = join_by("Group", "rowid")) %>% 
+  mutate(rfi = fi - exp(predfi) ) 
+  
+
+indid <- 
+  rfi[,c("ID")] %>%
+  unique() %>% 
+  cbind(indid = c(seq(1,117), seq(1,118)))
+
+rfi <- 
+  full_join(indid, rfi, by = join_by("ID")) 
+```
+
+Join and summarize
+
+```{r}
+allOut <- 
+  full_join(rfi,predbeta, 
+            by = join_by("indid", "draw", "Group" ) ) %>% 
+  full_join(predAdg,
+            by = join_by("indid", "draw", "Group" ))
+
+ 
+
+dataPlot <- 
+ allOut %>% 
+  # Get the average RFI throughout the cycle
+  group_by(ID, Group, draw) %>% 
+  summarise_at(vars(rfi, beta, adg), ~mean(.)) %>% 
+  group_by(ID, Group) %>% 
+  summarise_at(vars(rfi, beta, adg), list(mean = ~mean(.), 
+                                    q025 = ~quantile(., probs = 0.25), 
+                                    q975 = ~quantile(., probs = 0.75)
+                                    )
+               ) %>% 
+  group_by(Group) %>% 
+  mutate(meanadg = mean(adg_mean)) %>% 
+  ungroup() %>% 
+  # categorizing quadrants
+  mutate(.,
+         good = case_when(rfi_mean <=0 & adg_q025 > meanadg~ "Favorable", T~"Unfavorable" ),
+         IDlabel = case_when(good == "Favorable"~ID, T~NA_real_)
+         )
+
+
+
+```
+
+```{r}
+p5.1<-
+ggplot(data = dataPlot, 
+       aes(x = beta_mean, 
+          y = rfi_mean,
+          fill = good,
+          shape = Group))+
+  facet_wrap(~Group)+
+  geom_hline(yintercept = 0, linetype = "dashed")+
+  # Credible interval fro RFI
+  geom_linerange(aes(ymax = rfi_q975, ymin = rfi_q025, x = beta_mean),
+                alpha = 0.15)+
+  # Credible interval fro ADG
+  
+  geom_linerange(aes(xmax = beta_q975, xmin = beta_q025, y = rfi_mean),
+                alpha = .15)+
+  geom_point(alpha = .4)+
+  ggrepel::geom_label_repel(aes(label = IDlabel, x =beta_mean, y = rfi_mean), 
+                            max.overlaps = 15, 
+                            min.segment.length = unit(0, 'lines'),
+                            fill = "white", 
+                            color = "blue4")+
+  # 1:1 line
+  # Aesthetics
+  scale_fill_manual(values = c("blue4", "grey40"))+
+  scale_shape_manual(values = c(21,24))+
+  #scale_x_continuous(limits = c(0,25))+
+  #scale_y_continuous(limits = c(0,25))+
+  
+  guides(fill = guide_legend(title = "RFI category", 
+                             override.aes = list(alpha = 0.7, shape = 21) ), 
+         shape = "none")+
+  labs(y = expression(paste(italic(RFI["i \U00B7"]),"(kg ", DM~day^-1,")")), x = expression(paste(italic(beta["1i"]),"(kg DM",kg^-1,")")))+
+  theme_bw()+
+  theme(legend.position = "top", 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()
+        )
+p5.1
+```
+
+# Arrange and save
+
+
+```{r fig.width=7, fig.height=7}
+p5f <-
+ggpubr::ggarrange(p5, p5.1, nrow = 2, common.legend = T, labels = "AUTO",
+                  hjust = -2, vjust = -0.8)
+
+ggsave(plot = p5f,"../output/plots/RFI BETA1 Model 2_final.png", width = 7, height = 7, dpi=500)
+
+
+```
+
+
+
+
+
+
+

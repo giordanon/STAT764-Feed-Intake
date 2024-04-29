@@ -1,0 +1,337 @@
+
+# Packages
+
+```{r setup warning = F}
+library(rstan)
+library(tidyverse)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+```
+
+# Model 1
+
+# Observed data
+
+```{r}
+data <- read_csv("complete data auc.csv") %>% 
+    # Replace lab ID by an ID starting from zero
+    group_by(Lab_ID) %>% 
+    nest() %>% 
+    rowid_to_column("ID") %>% 
+    unnest(cols = data) %>% 
+    filter(Group %in% c(1,3)) %>% 
+    ungroup() 
+
+df2 <- 
+    data %>% 
+    transmute(.,
+              Group = as.factor(Group),
+              ID = ID, 
+              ptime = Day, 
+              fi = Total_Daily_DM_Intake, 
+              THI = ifelse(THI>70,THI-70,0),
+              AUC = AUC,
+              BWto = BW0
+    ) %>% 
+    drop_na(fi, THI) %>% 
+  group_by(Group) %>% 
+  nest() %>% 
+  mutate(data = map(data, ~.x %>% rowid_to_column("rowid") %>% 
+                      mutate(rowid = as.integer(rowid)
+                             )
+                    )
+         ) %>% 
+  unnest(cols = c(data))
+```
+
+# Extract posterior distributions and derived quantities
+
+## Model 1
+
+### ADG
+
+```{r}
+# Group 1
+modelPath <- "../output/models/Model 1.1.RData"
+
+predAdg1.1 <- 
+rstan::extract(readRDS(modelPath), pars = c("eta1")) %>% 
+  as.data.frame() %>% 
+  rowid_to_column("draw") %>% 
+  pivot_longer(cols = contains("eta")) %>% 
+  # Extract rowid
+  separate(name, c("par", "indid"), "eta1.") %>% 
+  mutate(rowid = as.integer(indid)) %>% 
+  transmute(.,
+            draw = draw,
+            indid = indid, 
+            adg = value) %>% 
+  mutate(Group = as.factor("1"))
+
+# Group 3
+modelPath <- "../output/models/Model 1.3.RData"
+
+predAdg1.3 <- 
+rstan::extract(readRDS(modelPath), pars = c("eta1")) %>% 
+  as.data.frame() %>% 
+  rowid_to_column("draw") %>% 
+  pivot_longer(cols = contains("eta")) %>% 
+  # Extract rowid
+  separate(name, c("par", "indid"), "eta1.") %>% 
+  mutate(rowid = as.integer(indid)) %>% 
+  transmute(.,
+            draw = draw,
+            indid = indid, 
+            adg = value) %>% 
+  mutate(Group = as.factor("3"))
+
+predAdg <- rbind(predAdg1.1, predAdg1.3)
+
+saveRDS(predAdg, "../output/posterior_adg.RData")
+
+
+predAdg <- readRDS("../output/posterior_adg.RData") %>% 
+  mutate(indid = as.integer(indid))
+
+
+```
+
+
+
+### RFI
+
+Extract the predicted FI posterior
+
+```{r}
+modelPath <- "../output/models/Model 1.1.RData"
+
+predFi1.1 <-
+rstan::extract(readRDS(modelPath), pars = "mu") %>% 
+  as.data.frame() %>% 
+  rowid_to_column("draw") %>% 
+  pivot_longer(cols = contains("mu")) %>% 
+  separate(name, c("par", "rowid"), "mu.") %>% 
+  mutate(rowid = as.integer(rowid)) %>% 
+  transmute(.,
+            draw = draw,
+            rowid = rowid, 
+            predfi = value) %>% 
+  mutate(Group = as.factor("1"))
+
+modelPath <- "../output/models/Model 1.3.RData"
+
+predFi1.3 <-
+rstan::extract(readRDS(modelPath), pars = "mu") %>% 
+  as.data.frame() %>% 
+  rowid_to_column("draw") %>% 
+  pivot_longer(cols = contains("mu")) %>% 
+  separate(name, c("par", "rowid"), "mu.") %>% 
+  mutate(rowid = as.integer(rowid)) %>% 
+  transmute(.,
+            draw = draw,
+            rowid = rowid, 
+            predfi = value) %>% 
+  mutate(Group = as.factor("3"))
+
+predFi <- rbind(predFi1.1, predFi1.3)
+
+saveRDS(predFi, "../output/posterior_rfi.RData")
+
+predFi <- readRDS("../output/posterior_rfi.RData")
+
+rm(predFi1.1, predFi1.3)
+
+```
+
+
+### BETA 1
+
+Extract effect of BW on FI
+
+```{r}
+# Group 1
+modelPath <- "../output/models/Model 1.1.RData"
+
+predbeta1.1 <- 
+rstan::extract(readRDS(modelPath), pars = c("beta1")) %>% 
+  as.data.frame() %>% 
+  rowid_to_column("draw") %>% 
+  pivot_longer(cols = contains("beta")) %>% 
+  # Extract rowid
+  separate(name, c("par", "indid"), "beta1.") %>% 
+  mutate(rowid = as.integer(indid)) %>% 
+  transmute(.,
+            draw = draw,
+            indid = indid, 
+            beta = value) %>% 
+  mutate(Group = as.factor("1"))
+
+# Group 3
+modelPath <- "../output/models/Model 1.3.RData"
+
+predbeta1.3 <- 
+rstan::extract(readRDS(modelPath), pars = c("beta1")) %>% 
+  as.data.frame() %>% 
+  rowid_to_column("draw") %>% 
+  pivot_longer(cols = contains("beta")) %>% 
+  # Extract rowid
+  separate(name, c("par", "indid"), "beta1.") %>% 
+  mutate(rowid = as.integer(indid)) %>% 
+  transmute(.,
+            draw = draw,
+            indid = indid, 
+            beta = value) %>% 
+  mutate(Group = as.factor("3"))
+
+predbeta <- rbind(predbeta1.1, predbeta1.3)
+
+saveRDS(predbeta, "../output/posterior_beta_model1.RData")
+
+
+predbeta <- readRDS("../output/posterior_beta_model1.RData") %>% 
+  mutate(indid = as.integer(indid))
+```
+
+## Model 2
+
+### ADG
+
+```{r}
+# Group 1
+modelPath <- "../output/models/Model 2.1.RData"
+
+predAdg1.1 <- 
+rstan::extract(readRDS(modelPath), pars = c("eta1")) %>% 
+  as.data.frame() %>% 
+  rowid_to_column("draw") %>% 
+  pivot_longer(cols = contains("eta")) %>% 
+  # Extract rowid
+  separate(name, c("par", "indid"), "eta1.") %>% 
+  mutate(rowid = as.integer(indid)) %>% 
+  transmute(.,
+            draw = draw,
+            indid = indid, 
+            adg = value) %>% 
+  mutate(Group = as.factor("1"))
+
+# Group 3
+modelPath <- "../output/models/Model 2.3.RData"
+
+predAdg1.3 <- 
+rstan::extract(readRDS(modelPath), pars = c("eta1")) %>% 
+  as.data.frame() %>% 
+  rowid_to_column("draw") %>% 
+  pivot_longer(cols = contains("eta")) %>% 
+  # Extract rowid
+  separate(name, c("par", "indid"), "eta1.") %>% 
+  mutate(rowid = as.integer(indid)) %>% 
+  transmute(.,
+            draw = draw,
+            indid = indid, 
+            adg = value) %>% 
+  mutate(Group = as.factor("3"))
+
+predAdg <- rbind(predAdg1.1, predAdg1.3)
+
+saveRDS(predAdg, "../output/posterior_adg_model2.RData")
+
+
+predAdg <- readRDS("../output/posterior_adg_model2.RData") %>% 
+  mutate(indid = as.integer(indid))
+
+#rm(predAdg1.1, predAdg1.3)
+
+```
+
+### RFI
+
+```{r}
+modelPath <- "../output/models/Model 2.1.RData"
+
+predFi1.1 <-
+rstan::extract(readRDS(modelPath), pars = "mu") %>% 
+  as.data.frame() %>% 
+  rowid_to_column("draw") %>% 
+  pivot_longer(cols = contains("mu")) %>% 
+  separate(name, c("par", "rowid"), "mu.") %>% 
+  mutate(rowid = as.integer(rowid)) %>% 
+  transmute(.,
+            draw = draw,
+            rowid = rowid, 
+            predfi = value) %>% 
+  mutate(Group = as.factor("1"))
+
+modelPath <- "../output/models/Model 2.3.RData"
+
+predFi1.3 <-
+rstan::extract(readRDS(modelPath), pars = "mu") %>% 
+  as.data.frame() %>% 
+  rowid_to_column("draw") %>% 
+  pivot_longer(cols = contains("mu")) %>% 
+  separate(name, c("par", "rowid"), "mu.") %>% 
+  mutate(rowid = as.integer(rowid)) %>% 
+  transmute(.,
+            draw = draw,
+            rowid = rowid, 
+            predfi = value) %>% 
+  mutate(Group = as.factor("3"))
+
+predFi <- rbind(predFi1.1, predFi1.3)
+
+saveRDS(predFi, "../output/posterior_rfi_model2.RData")
+
+predFi <- readRDS("../output/posterior_rfi_model2.RData")
+
+
+rm(predFi1.1, predFi1.3)
+
+
+```
+
+### BETA 1
+
+
+```{r}
+# Group 1
+modelPath <- "../output/models/Model 2.1.RData"
+
+predbeta1.1 <- 
+rstan::extract(readRDS(modelPath), pars = c("beta1")) %>% 
+  as.data.frame() %>% 
+  rowid_to_column("draw") %>% 
+  pivot_longer(cols = contains("beta")) %>% 
+  # Extract rowid
+  separate(name, c("par", "indid"), "beta1.") %>% 
+  mutate(rowid = as.integer(indid)) %>% 
+  transmute(.,
+            draw = draw,
+            indid = indid, 
+            beta = value) %>% 
+  mutate(Group = as.factor("1"))
+
+# Group 3
+modelPath <- "../output/models/Model 2.3.RData"
+
+predbeta1.3 <- 
+rstan::extract(readRDS(modelPath), pars = c("beta1")) %>% 
+  as.data.frame() %>% 
+  rowid_to_column("draw") %>% 
+  pivot_longer(cols = contains("beta")) %>% 
+  # Extract rowid
+  separate(name, c("par", "indid"), "beta1.") %>% 
+  mutate(rowid = as.integer(indid)) %>% 
+  transmute(.,
+            draw = draw,
+            indid = indid, 
+            beta = value) %>% 
+  mutate(Group = as.factor("3"))
+
+predbeta <- rbind(predbeta1.1, predbeta1.3)
+
+saveRDS(predbeta, "../output/posterior_beta_model2.RData")
+
+
+predbeta <- readRDS("../output/posterior_beta_model2.RData") %>% 
+  mutate(indid = as.integer(indid))
+```
+

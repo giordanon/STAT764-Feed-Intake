@@ -1,0 +1,88 @@
+
+```{r setup warning = F}
+library(rstan)
+library(tidyverse)
+source("functions.R")
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+```
+
+# Import data
+
+```{r}
+path_to_data <- "complete data auc.csv"
+
+seed <- 1234 # set random seed
+chains <- 1 # number of MCMC chains
+cores <- chains # number of cores to parallel processing
+iter <- 20000 # total number of MCMC samples
+burnIn <- iter/2 # Number of MCMC samples to discards (burn in interval)
+
+```
+
+# Model 1
+
+Equation XX in manuscript. Feed intake only affected by metabolic body weight.
+
+fi ~ f(BWt)
+
+```{r}
+# Input data
+data <- dataIn(path_to_data, "NA")
+# Stan model path
+model_input_directory <- "../models/Model 1.stan"
+# Where do you want to save the model?
+output_directory <- "../output/models/Model 1.RData"
+
+# Load stan model
+stanModel_1 <- stan_model(model_input_directory)
+# Sample
+sampling(stanModel_1, 
+         data = data,
+         seed = seed,
+         chains = chains,
+         cores = cores,
+         warmup = burnIn,
+         iter = iter,
+         thin = 1
+         ) %>% 
+  saveRDS(output_directory)
+```
+
+
+# Model 2
+
+Equation XX in manuscript. Feed intake only affected by metabolic body weight.
+
+fi ~ f(BWt, THIt)
+
+```{r}
+# Input data
+data <- dataIn(path_to_data, "THI")
+# Stan model path
+model_input_directory <- "../models/Model 2.stan"
+# Where do you want to save the model?
+output_directory <- "../output/models/Model 2.RData"
+
+# Load stan model
+stanModel_2 <- stan_model(model_input_directory)
+# Sample
+sampling(stanModel_2, 
+         data = data,
+         seed = seed,
+         chains = chains,
+         cores = cores,
+         warmup = burnIn,
+         iter = iter,
+         thin = 1, 
+         init = list(list(alpha = 2,
+                          sigma = 2,
+                          beta1 = rnorm(ncol(data$X), 0.01, 0.001),
+                          beta2 = rnorm(ncol(data$X), 0.0001, 0.00001), 
+                          eta1 = rnorm(ncol(data$X), 1, 0.01)))
+         ) %>% 
+  saveRDS(output_directory)
+```
+
+
+

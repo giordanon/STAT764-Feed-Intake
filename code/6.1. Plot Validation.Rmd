@@ -1,0 +1,193 @@
+---
+title: "6.1 Plot Validation"
+author: "Nicolas Giordano"
+date: "2024-04-26"
+output: html_document
+---
+
+# Model 1
+
+```{r}
+predFi <- readRDS("../output/posterior_rfi.RData")
+
+predAdg <- readRDS("../output/posterior_adg.RData") %>% 
+  mutate(indid = as.integer(indid))
+
+predbeta <- readRDS("../output/posterior_beta_model1.RData") %>% 
+  mutate(indid = as.integer(indid))
+
+rfi <- 
+full_join(predFi,
+          df2[, c("Group","ID", "rowid", "fi", "BWto")],
+          by = join_by("Group", "rowid")) %>% 
+  mutate(rfi = fi - exp(predfi)) 
+  
+
+indid <- 
+  rfi[,c("ID")] %>%
+  unique() %>% 
+  cbind(indid = c(seq(1,117), seq(1,118)))
+
+rfi <- 
+  full_join(indid, rfi, by = join_by("ID")) 
+```
+
+Join and summarize
+
+```{r}
+allOut <- 
+  full_join(rfi,predbeta, 
+            by = join_by("indid", "draw", "Group" ) ) %>% 
+  full_join(predAdg,
+            by = join_by("indid", "draw", "Group" ))
+
+ 
+
+dataPlot <- 
+ allOut %>% 
+  group_by(ID, Group, rowid) %>% 
+  summarise_at(vars(fi, predfi), list(mean = ~mean(.), 
+                                    q025 = ~quantile(., probs = 0.025), 
+                                    q975 = ~quantile(., probs = 0.975)
+                                    )
+               ) 
+
+
+
+```
+
+```{r}
+p1<-
+ggplot(data = dataPlot, 
+       aes(x = fi_mean, 
+          y = exp(predfi_mean),
+          #fill = good,
+          shape = Group))+
+  #facet_wrap(~Group)+
+  # Credible interval fro RFI
+  geom_linerange(aes(ymax = exp(predfi_q975), ymin = exp(predfi_q025), x = fi_mean),
+                alpha = 0.15)+
+  geom_point(alpha = .1, fill = "blue4")+
+  # 1:1 line
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed")+
+  # SMA Equation
+  geom_abline(slope = 0.8, intercept = 2.44, linetype = "solid", color = "grey8", linewidth = 1.2)+
+  geom_text(aes(x = 5, y = 25, label = "y = 2.02 + 0.84x"))+
+  # Error
+  geom_text(aes(x = 5, y = 23, label = "RMSE = 2.99 kgDM/day"))+
+  # Aesthetics
+  scale_shape_manual(values = c(21,24))+
+  scale_x_continuous(limits = c(0,25))+
+  scale_y_continuous(limits = c(0,25))+
+  
+  guides(fill = guide_legend(title = "RFI category", 
+                             override.aes = list(alpha = 0.7, shape = 21) ), 
+         shape = "none")+
+  labs(x = expression(paste(italic(FI["i"]),italic("(t)")," (kg ", DM~day^-1,")")), y = expression(paste(mu["i"],italic("(t)")," (kg ", DM~day^-1,")")))+
+  theme_bw()+
+  theme(legend.position = "top", 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()
+        )
+p1
+```
+
+
+# Model 2
+
+```{r}
+predFi <- readRDS("../output/posterior_rfi_model2.RData")
+
+predAdg <- readRDS("../output/posterior_adg_model2.RData") %>% 
+  mutate(indid = as.integer(indid))
+
+predbeta <- readRDS("../output/posterior_beta_model1.RData") %>% 
+  mutate(indid = as.integer(indid))
+
+rfi <- 
+full_join(predFi,
+          df2[, c("Group","ID", "rowid", "fi", "BWto")],
+          by = join_by("Group", "rowid")) %>% 
+  mutate(rfi = fi - exp(predfi)) 
+  
+
+indid <- 
+  rfi[,c("ID")] %>%
+  unique() %>% 
+  cbind(indid = c(seq(1,117), seq(1,118)))
+
+rfi <- 
+  full_join(indid, rfi, by = join_by("ID")) 
+```
+
+Join and summarize
+
+```{r}
+allOut <- 
+  full_join(rfi,predbeta, 
+            by = join_by("indid", "draw", "Group" ) ) %>% 
+  full_join(predAdg,
+            by = join_by("indid", "draw", "Group" ))
+
+ 
+
+dataPlot <- 
+ allOut %>% 
+  group_by(ID, Group, rowid) %>% 
+  summarise_at(vars(fi, predfi), list(mean = ~mean(.), 
+                                    q025 = ~quantile(., probs = 0.025), 
+                                    q975 = ~quantile(., probs = 0.975)
+                                    )
+               ) 
+
+
+
+```
+
+```{r}
+p1.1<-
+ggplot(data = dataPlot, 
+       aes(x = fi_mean, 
+          y = exp(predfi_mean),
+          #fill = good,
+          shape = Group))+
+  #facet_wrap(~Group)+
+  # Credible interval fro RFI
+  geom_linerange(aes(ymax = exp(predfi_q975), ymin = exp(predfi_q025), x = fi_mean),
+                alpha = 0.15)+
+  geom_point(alpha = .1, fill = "blue4")+
+  # 1:1 line
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed")+
+  # SMA Equation
+  geom_abline(slope = 0.8, intercept = 2.44, linetype = "solid", color = "grey8", linewidth = 1.2)+
+  geom_text(aes(x = 5, y = 25, label = "y = 2.11 + 0.84x"))+
+  # Error
+  geom_text(aes(x = 5, y = 23, label = "RMSE = 2.99 kgDM/day"))+
+  # Aesthetics
+  scale_shape_manual(values = c(21,24))+
+  scale_x_continuous(limits = c(0,25))+
+  scale_y_continuous(limits = c(0,25))+
+  
+  guides(fill = guide_legend(title = "RFI category", 
+                             override.aes = list(alpha = 0.7, shape = 21) ), 
+         shape = "none")+
+  labs(x = expression(paste(italic(FI["i"]),italic("(t)")," (kg ", DM~day^-1,")")), y = expression(paste(mu["i"],italic("(t)")," (kg ", DM~day^-1,")")))+
+  theme_bw()+
+  theme(legend.position = "top", 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()
+        )
+p1.1
+```
+
+
+# Arrange and save
+
+```{r fig.width=7, fig.height=7}
+p1f <-
+ggpubr::ggarrange(p1, p1.1, nrow = 1, common.legend = T, labels = "AUTO")
+
+ggsave(plot = p1f,"../output/plots/Validation.png", width = 14, height = 7, dpi=500)
+
+
+```
