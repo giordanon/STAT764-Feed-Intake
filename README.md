@@ -1,7 +1,7 @@
 # STAT764 Feed Intake
  Repository publish to reproduce analyses of STAT 764 final project.
 
- Authors: Matt King
+ Authors: Matt Kinghorn and Nico Giordano.
 
 The **models** directory contains .stan files with model 1 (feed intake predictor is metabolic body weight only) and model 2 (feed intake predictor is metabolic body weight and temperature humidity index).
 
