@@ -1,5 +1,5 @@
 # STAT764 Feed Intake
- Repository publish to reproduce analyses of STAT 764 final project.
+ Repository published to reproduce analyses of STAT 764 final project.
 
  Authors: Matt Kinghorn and Nico Giordano.
 
