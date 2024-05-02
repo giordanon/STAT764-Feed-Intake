@@ -7,7 +7,7 @@ The **models** directory contains .stan files with model 1 (feed intake predicto
 
 The **code** folder contain scripts to reproduce the analysis:
 
-- * Data Prep.Rmd.* Data wrangling and exploration. 
+- *Data Prep.Rmd.* Data wrangling and exploration. 
 
 - *2. Model Fitting.Rmd.* Code to run Stan filed with for models 1 and 2.
    
