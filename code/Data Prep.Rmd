@@ -1,0 +1,441 @@
+---
+title: "Data Prep"
+author: "Matthew Kinghorn & Nico Giordano"
+date: "2024-04-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(data.table)
+library(readr)
+library(tidyverse)
+library(lme4)
+library(lmerTest)
+library(ggcorrplot)
+library(performance)
+
+```
+
+```{r import, message=FALSE, warning=FALSE, results='hide'}
+
+fi<-fread(file="G:/My Drive/PhD_Course Material/Modules/Spring 2024/STAT 764/Data for Final Project/Water and Feed Intake_Elizabeth/filtered_feed_intakes.csv",header=TRUE,sep="auto") 
+bc<-fread(file="G:/My Drive/PhD_Course Material/Modules/Spring 2024/STAT 764/Data for Final Project/Water And Feed Intake_Will/Matt_Data_Compressed/breed_comp.csv", header=TRUE, sep= "auto")
+thi<-fread(file="G:/My Drive/PhD_Course Material/Modules/Spring 2024/STAT 764/Data for Final Project/Water And Feed Intake_Will/Matt_Data_Compressed/daily_max_THI.csv", header=TRUE, sep= "auto")
+wts<-fread(file="G:/My Drive/PhD_Course Material/Modules/Spring 2024/STAT 764/Data for Final Project/Water And Feed Intake_Will/Matt_Data_Compressed/weights.csv", header=TRUE, sep= "auto")
+
+#fi<-fread("https://www.dropbox.com/scl/fi/dfytmfy6hlvtmk7w1y9j8/filtered_feed_intakes.csv?rlkey=7bspim27bf8lx29a66sqsia0h&dl=1")
+#bc<-fread("https://www.dropbox.com/scl/fi/17u53yqpjrxbqoygw70ui/breed_comp.csv?rlkey=0qxzf8e9yegfppoc50ss03hj1&dl=1")
+#thi<-fread("https://www.dropbox.com/scl/fi/qfrynjyzausv2cqqfq8gw/daily_max_THI.csv?rlkey=e4bjm4dr5l79o9aca6mnze8gh&dl=1")
+#wts<-fread("https://www.dropbox.com/scl/fi/rhab2db7gveop2u82xapn/weights.csv?rlkey=8haq6i78gxznt50nk7o0ysau1&dl=")
+
+```
+
+```{r initial data prep}
+
+fi.1<-as.data.frame(fi)
+bc.1<-as.data.frame(bc)
+wts.1<-as.data.frame(wts)
+thi.1<-as.data.frame(thi)
+
+# Column format edits - Feed Intake
+fi.1 <- fi.1 %>%
+  mutate_at(vars(Visual,Time_In,Time_Out,Ration_Type,Lab_ID), as.character) %>%
+  mutate_at(vars(eID,Bunk,Period),as.factor) %>%
+  mutate_at(vars(Length,Start_Wt,End_Wt,Wt_Diff,Intake,Day,Group ),as.numeric) %>% # Intake is in kilograms of DMI (already converted to DMI)
+  mutate(Date = as.Date(Date))
+
+# Order According to ID and Day
+fi.1<-fi.1[order(fi.1$Lab_ID,fi.1$Day),]
+
+# Keeping Only first 70 days of test (restrictions on water were placed after that)
+fi.70 <- fi.1 %>%
+  filter(between(as.numeric(Day),0,70)) %>% 
+  filter(between(as.numeric(Group),1,5))
+
+# Removing Individual Intakes outside of 3 sd deviations, assuming there were scale errors (something might have fallen in, animals fight and bump scale,or knock scale over etc)
+sd<-sd(fi.70$Intake,na.rm=TRUE) 
+mean<-mean(fi.70$Intake,na.rm=TRUE)
+sdm3<-sd*3
+mean-sdm3
+mean+sdm3
+
+fi.70<-fi.70 %>%
+  filter(between(Intake,0,1.594723) | is.na(Intake)) 
+
+# # Total DM Intakes
+ fi.70 <- fi.70 %>% 
+   group_by(Lab_ID,Day) %>% 
+   mutate(Total_Daily_DM_Intake = sum(Intake,na.rm = TRUE))
+
+
+# Reducing dataset to contain one total feed intake per day for each animal
+fi.70 <- fi.70 %>% 
+  arrange(Lab_ID, Day) %>% 
+  distinct(Lab_ID, Day, .keep_all = TRUE)
+
+fi.70 <- fi.70[,c(16,17,9,12,13,14,18)]
+fi.70<-as.data.frame(fi.70)
+
+bc.1<-bc[,c(1,19,20,21,22)]
+
+#Column format edits - Breed Composition
+bc.1 <- bc.1 %>%
+  mutate_at(vars(Lab_ID), as.character())
+
+bc.1$Taurus <- bc.1$British + bc.1$Continental + bc.1$Dairy
+bc.1$Indicus <- bc.1$Bos_Indicus
+bc.1$Lab_ID <-as.character(bc.1$Lab_ID)
+
+thi.1$Date<-as.Date(thi.1$Date)
+
+#Column format edits - Weights
+wts.1 <- wts %>%
+  mutate_at(vars(Lab_ID,RefID), as.character()) %>%
+  mutate_at(vars(Group), as.factor) 
+
+wts.1<-wts.1[,c(1:9)] # Weights are measured in kilograms
+
+wts.1 <- wts.1 %>% 
+  pivot_longer(cols=c(4:9),
+               names_to = "Day", 
+               values_to = "Weight")
+
+wts.1$Day<-as.numeric(wts.1$Day)
+
+#wts.1 <- wts.1 %>% 
+#  group_by(Lab_ID) %>% 
+#  mutate(BW.75 = mean(Weight,na.rm=TRUE)^0.75)
+
+#BW calculated as Old et al. 2015
+# wts.1 <- wts.1 %>% 
+#   group_by(Lab_ID) %>% 
+#   mutate(BW.75 = ((sum(Weight) - mean(Weight, na.rm = TRUE))^2)^0.75)
+
+
+wts.1 <- wts.1 %>% 
+  group_by(Lab_ID) %>% 
+  mutate(BW.75 = mean(Weight)^0.75)
+
+wts.1<-as.data.frame(wts.1)
+wts.1$Day<-as.character(wts.1$Day)
+wts.1$Lab_ID<-as.character((wts.1$Lab_ID))
+
+ADG <- wts.1 %>%
+  filter(!is.na(Weight)) %>%
+  filter(Day == 0 | Day == 70) %>%
+  group_by(Lab_ID) %>%
+  summarise(Start_Weight = first(Weight), End_Weight = last(Weight)) %>%
+  mutate(ADG = (End_Weight - Start_Weight) / (70 - 0))
+
+
+fi.70$Day<-as.character(fi.70$Day)
+
+# Get unique Lab_IDs from wts.1
+unique_ids_weights <- unique(wts.1$Lab_ID)
+
+# Create a data frame with all combinations of Lab_ID and Day from 1 to 70
+fi.70.1 <- expand.grid(Lab_ID = unique_ids_weights, Day = 0:70)
+
+#Merging datasets so that only animals with body weights and FI data are kept
+fi.70.1<-merge(fi.70.1,fi.70, all.x = TRUE)
+
+fi.70.1 <- merge(fi.70.1, wts.1[, c("Lab_ID", "Day", "Weight")], by = c("Lab_ID","Day"), all = TRUE)
+
+unique_ids_intake <- unique(fi.70$Lab_ID)
+fi.70.1<-fi.70.1[fi.70.1$Lab_ID %in% unique_ids_intake,]
+
+fi.70.1$Window <- cut(fi.70.1$Day, breaks = c(0, 14, 28, 42, 56, 70), labels = c("0-14", "15-28", "29-42", "43-56", "57-70"), right = FALSE)
+
+fi.70.1<- fi.70.1 %>% 
+  group_by(Window,Lab_ID) %>% 
+  mutate(startdate = min(as.Date(Date, format="%Y-%m-%d"),na.rm=T)-1,
+         Date = case_when(is.na(Date)~as.Date(startdate, format="%Y-%m-%d"),T~as.Date(Date, format="%Y-%m-%d")))  
+
+
+#fi.70.1$Perc_Taurus<-bc.1[match(fi.70.1$Lab_ID,bc.1$Lab_ID),6]
+#fi.70.1$Perc_Taurus<-as.numeric(unlist(fi.70.1$Perc_Taurus))
+#fi.70.1$Perc_Indicus<-bc.1[match(fi.70.1$Lab_ID,bc.1$Lab_ID),7]
+#fi.70.1$Perc_Indicus<-as.numeric(unlist(fi.70.1$Perc_Indicus))
+fi.70.1$THI<-thi.1[match(fi.70.1$Date,thi.1$Date),2]
+fi.70.1$THI<-as.numeric(unlist(fi.70.1$THI))
+#fi.70.1$BW.75<-wts.1[match(fi.70.1$Lab_ID,wts.1$Lab_ID),6]
+#fi.70.1$BW.75<-as.numeric(unlist(fi.70.1$BW.75))
+#fi.70.1$ADG<-ADG[match(fi.70.1$Lab_ID,ADG$Lab_ID),4]
+#fi.70.1$ADG<-as.numeric(unlist(fi.70.1$ADG))
+fi.70.1$BW0<-ADG[match(fi.70.1$Lab_ID,ADG$Lab_ID),2]
+fi.70.1$BW0<-as.numeric(unlist(fi.70.1$BW0))
+
+# Order According to ID and Day
+#fi.70.1<-fi.70.1[order(fi.70.1$Lab_ID,fi.70.1$Day),]
+
+#write.csv(fi.70.1, file="../data/feed intake filtered.csv")
+
+# fi.70.thi<-as.data.frame(fi.70.1)
+# 
+# # Convert Date to Date format if it's not already
+# fi.70.thi$Date <- as.Date(fi.70.thi$Date)
+# 
+# # Create a new column indicating the window each day belongs to
+# fi.70.thi$Window <- cut(fi.70.thi$Day, breaks = c(0, 14, 28, 42, 56, 70), labels = c("0-14", "15-28", "29-42", "43-56", "57-70"), right = FALSE)
+# 
+# # Order the data by Date
+# fi.70.thi <- fi.70.thi[order(fi.70.thi$Lab_ID, fi.70.thi$Day), ]
+# 
+# # Calculate average THI for each window by Year, Window, and Day
+# avg_THI <- aggregate(THI ~ Lab_ID + Window, data = fi.70.thi, FUN = "mean", na.rm = TRUE)
+# 
+# # Merge the average THI back to the original dataframe
+# fi.70.thi <- merge(fi.70.thi, avg_THI, by = c("Window","Lab_ID"), suffixes = c("", "_Avg"))
+# 
+# # Create a new column indicating whether THI exceeds the threshold
+# fi.70.thi$Heat_Stress <- ifelse(fi.70.thi$THI > 70, 1, 0)
+# 
+# # Calculate the count of heat stress events in each window
+# heat_stress_counts <- aggregate(Heat_Stress ~ Window + Lab_ID, data = fi.70.thi, FUN = sum)
+# 
+# # Merge the heat stress counts back to the original dataframe
+# fi.70.thi <- merge(fi.70.thi, heat_stress_counts, by = c("Window", "Lab_ID"), all.x = TRUE)
+# 
+# fi.70.thi$HS_Events<-as.numeric(fi.70.thi$Heat_Stress.y)
+# 
+# fi.70.thi<-fi.70.thi[,c(2,3,1,4:16,19)]
+# 
+# # Order According to ID and Day
+# fi.70.thi<-fi.70.thi[order(fi.70.thi$Lab_ID,fi.70.thi$Day),]
+# 
+# fi.70.thi <- fi.70.thi %>% 
+#   fill(Group,.direction =  c("downup")) %>% 
+#   drop_na(Weight)
+# 
+# fi.70.thi$Bwt<-fi.70.thi$Weight - fi.70.thi$BW0
+# fi.70.thi$THI_deg<-ifelse(fi.70.thi$THI_Avg >= 70 , fi.70.thi$THI_Avg-70, 0)
+
+complete.data<- fi.70.1 %>% 
+  fill(Group, .direction = "downup") %>% 
+  fill(Pen, .direction = "downup") 
+  #fill(Date, .direction = "downup")
+
+
+#write.csv(summer.g1,"../code/summerg1_full.csv",row.names = F)
+#write.csv(complete.data,"../code/complete data.csv",row.names = F)
+
+
+```
+
+Feed Intake data was read in, and columns were set to the correct formats. The data contained Feed Intake records up to 140 days, which is abnormal for most feed intakes tests which only run for 70 days. The reason for this is that additional tests were done on these animals involving restricted water intakes. We were only interested in the first 70 days though. We merged this data with body weight data from body weights measured every 14 days, and also breed composition in the form of percentage taurus and daily maximum temperature humidity indexes for each day in the test.
+
+Data edits were performed by [@ahlbergTestDurationWater2018] where DMI were calculated according to  where $DMI=FI_{id} \times DM \%_g$ where $FI_{id}$ is the Feed Intake for Animal $i$ on day $d$ and $DM \%_g$ is the dry matter percentage for the ration fed to the group $g$. The measurements were already in this format when we received them. Additionally, Individual feeding intake measurements outside of 3 standard deviations were removed to ensure data quality (e.g., it is biologically impossible for an animal to consume 12kg of feed in 59 seconds).  
+
+Average Daily gain and metabolic midweights were also calculated for utilization in the base model: $DMI = \beta_0  BW^0.75 + \beta_1 ADG$. This model represents the current methodology used ot calculated RFI. 
+
+
+
+```{r data exploration}
+
+# Histogram - Total Daily DM Intake
+ggplot(data = fi.70.1, aes(x = Total_Daily_DM_Intake)) +
+  geom_histogram(fill = "mediumorchid4", color = "black") +  
+  labs(title = "Histogram of DM Intake ",
+       x = "Daily Feed Intake (kg/DM per Day)",
+       y = "Density") +
+  theme_minimal() 
+
+
+random_animals <- sample(unique(fi.70.1$Lab_ID), 5)
+
+# Filter data for selected animals
+selected_data <- fi.70.1 %>%
+  filter(Lab_ID %in% random_animals)
+
+# Create histograms
+ggplot(data = selected_data, aes(x = Total_Daily_DM_Intake)) +
+  geom_histogram(fill = "mediumorchid4", color = "black") +  
+  labs(title = "Histogram of DM Intake by Animal",
+       x = "Daily Feed Intake (kg/DM per Day)",
+       y = "Density") +
+  theme_minimal() +
+  facet_wrap(~ Lab_ID, ncol = 1, scales = "free") # Facet by animal
+
+
+# Histogram - Body Weight
+ggplot(data = fi.70.1, aes(x = Weight)) +
+  geom_histogram(fill = "gold", color = "black") +  
+  labs(title = "Histogram of Weight",
+       x = "Weight (kg)",
+       y = "Density") +
+  theme_minimal() 
+
+# Histogram - Percent Taurus
+#ggplot(data = fi.70.1, aes(x = Perc_Taurus)) +
+#  geom_histogram(fill = "blue", color = "black") +  
+#  labs(title = "Histogram of Percent Taurus",
+#       x = "Percent Taurus (%)",
+#       y = "Density") +
+#  theme_minimal() 
+
+# Histogram - Temperture Humidity Index
+ggplot(data = fi.70.1, aes(x = THI)) +
+  geom_histogram(fill = "red", color = "black") +  
+  labs(title = "Histogram of Temperature Humidity Index",
+       x = "Temperature Humidity Index",
+       y = "Density") +
+  theme_minimal() 
+
+# Histogram - ADG
+#ggplot(data = fi.70.1, aes(x = ADG)) +
+#  geom_histogram(fill = "green", color = "black") +  
+#  labs(title = "Histogram of ADG",
+#       x = "ADG (kg/day)",
+#       y = "Density") +
+#  theme_minimal() 
+
+
+```
+
+```{r correlation matrix}
+
+# # fi.70.1 <- fi.70.1 %>%
+#   mutate_at(vars(Lab_ID,Day,Group,Ration_Type, Window),as.factor) %>%
+#   mutate_at(vars(Weight, Total_Daily_DM_Intake, THI, BW0),as.numeric) %>% # Intake is in kilograms of DMI (already converted to DMI)
+#   mutate(Date = as.Date(Date))  
+# 
+# cor.test.plus<-function(x) {
+#    list(x,
+#         Standard.Error=unname(sqrt((1-x$estimate^2)/x$parameter)))
+#  }
+#  
+# cor.test.plus(cor.test(fi.70.1$Weight,fi.70.1$THI))
+# 
+# 
+# cor.test.plus(cor.test(fi.70.1$Total_Daily_DM_Intake,fi.70.1$THI))
+# cor.test.plus(cor.test(fi.70.1$Total_Daily_DM_Intake,fi.70.1$THI))
+# 
+# lm(Weight ~ THI, data = fi.70.1)
+
+
+
+```
+
+```{r fi & rfi models}
+
+fi.70.1$BW.75<-wts.1[match(fi.70.1$Lab_ID,wts.1$Lab_ID),6]
+fi.70.1$BW.75<-as.numeric(unlist(fi.70.1$BW.75))
+fi.70.1$ADG<-ADG[match(fi.70.1$Lab_ID,ADG$Lab_ID),4]
+fi.70.1$ADG<-as.numeric(unlist(fi.70.1$ADG))
+
+fi.70.1$Lab_ID<-as.factor(fi.70.1$Lab_ID)
+fi.70.1$Day <- as.factor(fi.70.1$Day)
+fi.70.1$BW.75<-as.numeric(fi.70.1$BW.75)
+
+# Linear Model (Old et al 2015)
+m1 <- lmer(Total_Daily_DM_Intake ~ BW.75 + ADG + (1 | Lab_ID),
+           data = fi.70.1,REML=TRUE)
+summary(m1)
+
+model_performance(m1)
+
+fi.70.2<-as.data.frame(fi.70.1)
+
+# Predict feed intake for each Lab ID
+predicted_intake<- predict(m1, newdata = fi.70.2, allow.new.levels=TRUE)
+
+# Add predicted values to the original dataframe
+fi.70.2$predicted_intake <- predicted_intake
+
+# Histogram - Total Daily DM Intake
+ggplot(data = fi.70.2, aes(x = predicted_intake)) +
+  geom_histogram(fill = "mediumorchid4", color = "black") +
+  labs(title = "Histogram of predictd DM Intake ",
+       x = "Predictied DM Intake (kg/DM per Day)",
+       y = "Density") +
+  theme_minimal()
+
+cor.test.plus<-function(x) {
+  list(x,
+       Standard.Error=unname(sqrt((1-x$estimate^2)/x$parameter)))
+}
+
+cor.test.plus(cor.test(fi.70.2$Total_Daily_DM_Intake,fi.70.2$predicted_intake))
+
+fi.70.2$RFI<-fi.70.2$Total_Daily_DM_Intake - fi.70.2$predicted_intake
+
+# Create a scatter plot of predicted versus observed values
+ggplot(fi.70.2, aes(x = predicted_intake, y = Total_Daily_DM_Intake)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+  labs(x = "Predicted Dry Matter Intake",
+       y = "Observed Dry Matter Intake",
+       title = "Predicted vs. Observed Dry Matter Intake") +
+  scale_x_continuous(limits = c(0,20))+
+  scale_y_continuous(limits = c(0,20))
+  theme_minimal()
+
+# Histogram - Total Daily DM Intake
+ggplot(data = fi.70.2, aes(x = RFI)) +
+  geom_histogram(fill = "mediumorchid4", color = "black") +
+  labs(title = "Histogram of RFI",
+       x = "RFI (kg/DM per Day)",
+       y = "Density") +
+  theme_minimal()
+
+# Create a histogram for Total_Daily_DM_Intake and predicted_intake
+ggplot(fi.70.2, aes(x = Total_Daily_DM_Intake, fill = "Total_Daily_DM_Intake")) +
+  geom_histogram(alpha = 0.5, bins = 30) +
+  geom_histogram(aes(x = predicted_intake, fill = "Predicted_Daily_DM_Intake"), alpha = 0.5, bins = 30) +
+  scale_fill_manual(values = c("Total_Daily_DM_Intake" = "blue", "Predicted_Daily_DM_Intake" = "red")) +
+  labs(title = "Histogram of Total and Predicted Daily DM Intake",
+       x = "Daily DM Intake",
+       y = "Frequency") +
+  theme_minimal()
+
+```
+
+```{r bw model}
+# fi.70.thi$Day <-as.factor(fi.70.thi$Day)
+# summer.g1$THI <-as.numeric(summer.g1$THI)
+# 
+# # BW calculated by Ahlberg et al. 2018
+# m2 <- lmer(Weight ~ THI + (1 | Lab_ID), 
+#            data = summer.g1, REML=TRUE)
+# summary(m2)
+# 
+# fi.70.3<-as.data.frame(fi.70.thi)
+# 
+# # Predict feed intake for each Lab ID
+# predicted_weight<- predict(m2, newdata = fi.70.3, allow.new.levels=TRUE)
+# 
+# # Add predicted values to the original dataframe
+# fi.70.3$predicted_weight<- predicted_weight
+# 
+# ggplot(data = fi.70.3, aes(x = Weight)) +
+#   geom_histogram(fill = "mediumorchid4", color = "black") +  
+#   labs(title = "Histogram of Weight",
+#        x = "Weight (kg)",
+#        y = "Density") +
+#   theme_minimal() 
+# 
+# ggplot(data = fi.70.3, aes(x = predicted_weight
+#                            )) +
+#   geom_histogram(fill = "mediumorchid4", color = "black") +  
+#   labs(title = "Histogram of Predicted Weight",
+#        x = "Weight (kg)",
+#        y = "Density") +
+#   theme_minimal()
+# 
+# # Calculate average weight for each day
+# average_weight <- fi.70.3 %>%
+#   group_by(Day) %>%
+#   summarise(avg_weight = mean(predicted_weight, na.rm = TRUE))
+# 
+# # Plot the average weight for each day
+# plot(average_weight$Day, average_weight$avg_weight, 
+#      type = "o", 
+#      xlab = "Day", 
+#      ylab = "Average Weight",
+#      main = "Average Weight for Each Day")
+
+```
+
+
