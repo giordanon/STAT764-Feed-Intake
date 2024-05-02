@@ -19,6 +19,6 @@ The **code** folder contain scripts to reproduce the analysis:
 
 - *6.3 Plot RFI and BETA1.Rmd.* Reproduce Figure 3.
 
-- *6.4 Plot ADG BETA1.Rmd*. Reproduce Figure 4.
+- *6.4 Plot BETA1 and ADG.Rmd*. Reproduce Figure 4.
 
 - The *functions.R* file contains backend functions used in Rmd files. 
